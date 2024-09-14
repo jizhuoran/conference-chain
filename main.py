@@ -4,21 +4,22 @@ import matplotlib.pyplot as plt
 from pyvis.network import Network
 
 class Conference:
-    def __init__(self, name, area, submission_deadline, notification_date, page, column):
+    def __init__(self, name, area, page, column, submission_deadline_str, notification_date_str, submission_deadline=None, notification_date=None):
         self.name = name
         self.area = area
-        self.submission_deadline = submission_deadline
-        self.notification_date = notification_date
         self.page = page
         self.column = column
-
+        self.submission_deadline_str = submission_deadline_str
+        self.notification_date_str = notification_date_str
+        if submission_deadline is None and notification_date is None:
+            submission_deadline, notification_date = self.compute_day(submission_deadline_str, notification_date_str)
+        self.submission_deadline = submission_deadline
+        self.notification_date = notification_date
+    
     def __str__(self):
         return f'{self.name}'
 
-
-#load data from CSV file
-def load_conferences_from_csv(filename):
-    def compute_day(submission_str, notification_str):
+    def compute_day(self, submission_str, notification_str):
         s_year, s_month, s_day = submission_str.split('-')
         n_year, n_month, n_day = notification_str.split('-')
         n_year = int(n_year) - int(s_year)
@@ -28,13 +29,18 @@ def load_conferences_from_csv(filename):
         n_time = int(n_day) + int(n_month) * 30 + int(n_year) * 365
 
         return s_time, n_time
+    
+    
+
+#load data from CSV file
+def load_conferences_from_csv(filename):
+
 
     conferences = []
     with open(filename, 'r') as file:
         for line in file:
             name, area, submission_deadline, notification_date, page, col = line.strip().split(',')
-            submission_deadline, notification_date = compute_day(submission_deadline, notification_date)
-            conferences.append(Conference(name, area, submission_deadline, notification_date, page, col))
+            conferences.append(Conference(name, area, page, col, submission_deadline, notification_date))
     return conferences
 
 def apply_filter(conferences, func):
@@ -48,7 +54,7 @@ def construct_conference_graph(conferences, start_data):
             if conference.submission_deadline >= start_data:
                 _conferences.append(conference)
             else:
-                _conferences.append(Conference(conference.name, conference.area, conference.submission_deadline + 365, conference.notification_date + 365, conference.page, conference.column))
+                _conferences.append(Conference(conference.name, conference.area, conference.page, conference.column, conference.submission_deadline_str, conference.notification_date_str, conference.submission_deadline + 365, conference.notification_date + 365))
         return _conferences
     
     def get_next_conference(conferences, start_data):
@@ -69,8 +75,9 @@ def construct_conference_graph(conferences, start_data):
     G = nx.DiGraph()
 
     for conference in _conferences:
-        area_to_color = {'ARCH': 'gold', 'Security': 'blue', 'PL': 'green', 'Sys': 'yellow', 'AI': 'purple'}
-        G.add_node(conference, color= area_to_color[conference.area] if conference.name != next_conference else 'red')
+        area_to_color = {'ARCH': 'gold', 'Security': 'blue', 'PL': 'green', 'Sys': 'red', 'AI': 'purple'}
+        G.add_node(conference, color= area_to_color[conference.area])
+        # G.add_node(conference, color= area_to_color[conference.area] if conference.name != next_conference else 'red')
 
     for conference1 in _conferences:
         for conference2 in _conferences:
@@ -82,35 +89,93 @@ def construct_conference_graph(conferences, start_data):
 
 def draw_conference_graph(G):
 
+
     for node in G.nodes():
-        G = nx.relabel_nodes(G, {node: str(node)})
+        G.nodes[node]['info'] = f'Area: {node.area}\nSubmission deadline: {node.submission_deadline_str}\nNotification date: {node.notification_date_str}\nPage: {node.page}\nColumn: {node.column}'
 
-    # Create a pyvis network
+    for node in G.nodes():
+        G = nx.relabel_nodes(G, {node: str(node.name)})
+
+
+    # Create a pyvis network with directed flag set to True
     net = Network(notebook=True, directed=True)
-    net.from_nx(G)
 
-    # Customize options
-    # net.set_options("""
-    # var options = {
-    # "nodes": {
-    #     "color": {
-    #     "border": "rgba(0,0,0,0.3)",
-    #     "background": "rgba(97,189,79,1)"
-    #     },
-    #     "font": {
-    #     "color": "#ffffff"
-    #     }
-    # },
-    # "edges": {
-    #     "color": {
-    #     "color": "rgba(0,0,0,0.3)"
-    #     }
-    # }
-    # }
-    # """)
+    # Identify nodes without in-edges (source nodes)
+    source_nodes = [node for node in G.nodes if G.in_degree(node) == 0]
+
+    # Initialize the level map
+    level_map = {}
+
+    # Perform topological sort
+    topo_order = list(nx.topological_sort(G))
+
+    # Assign levels based on topological order
+    for node in topo_order:
+        predecessors = list(G.predecessors(node))
+        if not predecessors:
+            # Source node
+            level_map[node] = 0
+        else:
+            # Level is max level of predecessors plus 1
+            level_map[node] = max(level_map[pred] for pred in predecessors) + 1
+
+    # Assign node positions (x, y) based on levels
+    positions_per_level = {}
+    for node, level in level_map.items():
+        positions_per_level.setdefault(level, [])
+        positions_per_level[level].append(node)
+
+    # Assign positions to nodes, spreading them horizontally within each level
+    node_positions = {}
+    for level, nodes_in_level in positions_per_level.items():
+        x_spacing = 150  # Adjust horizontal spacing as needed
+        y_position = -200 * level  # Adjust vertical spacing as needed
+        x_positions = [x_spacing * i for i in range(len(nodes_in_level))]
+        for x_pos, node in zip(x_positions, nodes_in_level):
+            # net.add_node(node, level=level, x=x_pos, y=y_position, color=G.nodes[node]['color'])
+            
+
+            # Retrieve node attributes
+            node_label = G.nodes[node].get('name', str(node))
+            node_info = G.nodes[node].get('info', '')
+
+            # Set the 'title' attribute for the hover tooltip
+            net.add_node(
+                node,
+                # label=node_label,
+                title=node_info,
+                x=x_pos,
+                y=y_position,
+                level=level,
+                color=G.nodes[node]['color']
+            )
+
+
+    # Add edges from the networkx graph to Pyvis
+    # Note: Since we've manually added nodes, ensure edges are correctly added
+    for source, target in G.edges():
+        net.add_edge(source, target)
+
+    # Customize options to make the graph more sparse and disable physics
+    net.set_options("""
+    var options = {
+    "physics": {
+        "enabled": false
+    },
+    "layout": {
+        "hierarchical": false
+    },
+    "edges": {
+        "arrows": {
+        "to": { "enabled": true, "scaleFactor": 1.2 }
+        }
+    }
+    }
+    """)
+
 
     # Visualize
-    net.show("conference_chain.html")
+    net.show("your_submission_opportunity.html")
 
 def start_data(conferences, conf=None, days_from_now=None):
     if conf is None:
@@ -124,10 +189,12 @@ def start_data(conferences, conf=None, days_from_now=None):
             if conference.name == conf:
                 return conference.submission_deadline
 
-conferences = load_conferences_from_csv('conferences.csv')
-filters = [lambda x: x.area == 'ARCH']
-for filter in filters:
-    conferences = apply_filter(conferences, filter)
-
-G = construct_conference_graph(conferences, start_data(conferences, days_from_now=50))
-draw_conference_graph(G)
+if __name__ == '__main__':
+    print('Please enter the days from now you want to submit your paper')
+    days_from_now = int(input())
+    conferences = load_conferences_from_csv('conferences.csv')
+    filters = []
+    for filter in filters:
+        conferences = apply_filter(conferences, filter)
+    G = construct_conference_graph(conferences, start_data(conferences, days_from_now=days_from_now))
+    draw_conference_graph(G)
