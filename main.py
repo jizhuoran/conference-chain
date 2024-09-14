@@ -1,7 +1,5 @@
 import datetime
-import base64
 import networkx as nx
-import matplotlib.pyplot as plt
 from pyvis.network import Network
 
 
@@ -246,7 +244,7 @@ def start_data(conferences, conf=None, days_from_now=None):
 
 
 if __name__ == "__main__":
-    print("Please enter the days from now you want to submit your paper")
+    print("Please enter the days from now you want to submit your paper: ", end="")
     days_from_now = int(input())
     conferences = load_conferences_from_csv("conferences.csv")
     filters = []
@@ -256,3 +254,4 @@ if __name__ == "__main__":
         conferences, start_data(conferences, days_from_now=days_from_now)
     )
     draw_conference_graph(G)
+
