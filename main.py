@@ -217,16 +217,26 @@ def draw_conference_graph(G):
         "hierarchical": false
     },
     "edges": {
+        "width": 0.1,
         "arrows": {
-        "to": { "enabled": true, "scaleFactor": 1.2}
+            "to": {
+                "enabled": true,
+                "scaleFactor": 1.2
+            }
         },
-        "width": 2
+        "selectionWidth": 10
+    },
+    "interaction": {
+        "selectConnectedEdges": true,
+        "multiselect": true,
+        "hover": true,
+        "hoverConnectedEdges": true
     }
     }
     """
     )
 
-    # Show the network
+    # # Show the network
     net.show("your_submission_opportunity.html")
 
 
@@ -254,4 +264,3 @@ if __name__ == "__main__":
         conferences, start_data(conferences, days_from_now=days_from_now)
     )
     draw_conference_graph(G)
-
